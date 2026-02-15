@@ -25,14 +25,11 @@ public class VeiculoApplicationService {
 
     private final VeiculoRepository veiculoRepository;
     private final ClienteRepository clienteRepository;
-    private final EventPublishingService eventPublishingService;
 
     public VeiculoApplicationService(VeiculoRepository veiculoRepository,
-            ClienteRepository clienteRepository,
-            EventPublishingService eventPublishingService) {
+            ClienteRepository clienteRepository) {
         this.veiculoRepository = veiculoRepository;
         this.clienteRepository = clienteRepository;
-        this.eventPublishingService = eventPublishingService;
     }
 
     /**
@@ -71,9 +68,6 @@ public class VeiculoApplicationService {
 
         // Salvar
         Veiculo veiculoSalvo = veiculoRepository.save(veiculo);
-
-        // Publicar evento
-        eventPublishingService.publicarVeiculoCriado(veiculoSalvo);
 
         return VeiculoResponseDTO.fromDomain(veiculoSalvo);
     }
@@ -139,9 +133,6 @@ public class VeiculoApplicationService {
 
         Veiculo veiculoAtualizado = veiculoRepository.save(veiculo);
 
-        // Publicar evento
-        eventPublishingService.publicarVeiculoAtualizado(veiculoAtualizado);
-
         return VeiculoResponseDTO.fromDomain(veiculoAtualizado);
     }
 
@@ -162,9 +153,6 @@ public class VeiculoApplicationService {
 
         // Deletar
         veiculoRepository.deleteById(veiculoId);
-
-        // Publicar evento
-        eventPublishingService.publicarVeiculoDeletado(veiculoId);
     }
 
     // ===== Métodos de Validação =====
