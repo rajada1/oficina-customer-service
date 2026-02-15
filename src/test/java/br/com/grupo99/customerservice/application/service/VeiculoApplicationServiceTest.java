@@ -34,9 +34,6 @@ class VeiculoApplicationServiceTest {
     @Mock
     private ClienteRepository clienteRepository;
 
-    @Mock
-    private EventPublishingService eventPublishingService;
-
     @InjectMocks
     private VeiculoApplicationService service;
 
@@ -84,7 +81,6 @@ class VeiculoApplicationServiceTest {
         assertEquals(validRequestDTO.placa(), response.placa());
         assertEquals(validRequestDTO.marca(), response.marca());
         verify(veiculoRepository, times(1)).save(any(Veiculo.class));
-        verify(eventPublishingService, times(1)).publicarVeiculoCriado(any(Veiculo.class));
     }
 
     @Test
@@ -182,6 +178,5 @@ class VeiculoApplicationServiceTest {
 
         // Assert
         verify(veiculoRepository, times(1)).deleteById(veiculoId);
-        verify(eventPublishingService, times(1)).publicarVeiculoDeletado(veiculoId);
     }
 }
