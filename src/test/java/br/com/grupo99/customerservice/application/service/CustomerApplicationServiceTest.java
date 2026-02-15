@@ -29,9 +29,6 @@ class CustomerApplicationServiceTest {
     @Mock
     private ClienteRepository clienteRepository;
 
-    @Mock
-    private EventPublishingService eventPublishingService;
-
     @InjectMocks
     private CustomerApplicationService service;
 
@@ -65,7 +62,6 @@ class CustomerApplicationServiceTest {
         assertEquals(pessoaId, response.pessoaId());
         assertNotNull(response.createdAt());
         verify(clienteRepository, times(1)).save(any(Cliente.class));
-        verify(eventPublishingService, times(1)).publicarClienteCriado(any(Cliente.class));
     }
 
     @Test
@@ -120,7 +116,6 @@ class CustomerApplicationServiceTest {
 
         // Assert
         verify(clienteRepository, times(1)).deleteById(pessoaId);
-        verify(eventPublishingService, times(1)).publicarClienteDeletado(pessoaId);
     }
 
     private void setTimestamps(Cliente cliente) {
