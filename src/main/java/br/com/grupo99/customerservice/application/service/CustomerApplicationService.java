@@ -23,12 +23,9 @@ import java.util.UUID;
 public class CustomerApplicationService {
 
     private final ClienteRepository clienteRepository;
-    private final EventPublishingService eventPublishingService;
 
-    public CustomerApplicationService(ClienteRepository clienteRepository,
-            EventPublishingService eventPublishingService) {
+    public CustomerApplicationService(ClienteRepository clienteRepository) {
         this.clienteRepository = clienteRepository;
-        this.eventPublishingService = eventPublishingService;
     }
 
     /**
@@ -41,9 +38,6 @@ public class CustomerApplicationService {
         // Criar Cliente com pessoaId vindo do People Service
         Cliente cliente = new Cliente(requestDTO.pessoaId());
         Cliente clienteSalvo = clienteRepository.save(cliente);
-
-        // Publicar evento
-        eventPublishingService.publicarClienteCriado(clienteSalvo);
 
         return ClienteResponseDTO.fromDomain(clienteSalvo);
     }
@@ -77,7 +71,6 @@ public class CustomerApplicationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com pessoaId: " + pessoaId));
 
         // Cliente apenas recebe pessoaId, dados pessoais vêm do People Service
-        eventPublishingService.publicarClienteAtualizado(cliente);
 
         return ClienteResponseDTO.fromDomain(cliente);
     }
@@ -90,7 +83,6 @@ public class CustomerApplicationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com pessoaId: " + pessoaId));
 
         clienteRepository.deleteById(pessoaId);
-        eventPublishingService.publicarClienteDeletado(pessoaId);
     }
 
     // ===== Métodos de Validação =====
