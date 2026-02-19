@@ -11,9 +11,10 @@ echo "Starting deploy script..."
 ROOT_DIR=$(pwd)
 echo "Repository root: $ROOT_DIR"
 
-cd k8s/customer-service
+cd k8s
 
-echo "Applying manifests in k8s/customer-service to namespace $SERVICE_NAME"
+echo "Applying manifests in k8s to namespace $SERVICE_NAME"
+# apply kustomize in k8s root
 kubectl apply -k . -n "$SERVICE_NAME"
 
 IMAGE="${IMAGE_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
