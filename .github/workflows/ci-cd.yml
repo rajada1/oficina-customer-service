@@ -157,20 +157,47 @@ jobs:
         id: ssm
         run: |
           echo "Retrieving parameters from SSM..."
+          set -euo pipefail
           ENVIRONMENT=${{ github.event.inputs.environment || 'dev' }}
 
-          # Database credentials
-          DB_ENDPOINT=$(aws ssm get-parameter --name "/microservices/$ENVIRONMENT/customer-service-db/endpoint" --query "Parameter.Value" --output text)
+          missing=()
+
+          get_param() {
+            local name="$1"; local decrypt="$2"
+            if [ "$decrypt" = "true" ]; then
+              aws ssm get-parameter --name "$name" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo ""
+            else
+              aws ssm get-parameter --name "$name" --query "Parameter.Value" --output text 2>/dev/null || echo ""
+            fi
+          }
+
+          DB_ENDPOINT=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/endpoint" false)
+          DB_PORT=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/port" false)
+          DB_NAME=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/name" false)
+          DB_USER=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/username" true)
+          DB_PASS=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/password" true)
+
+          # EKS cluster (optional fallback to env)
+          EKS_CLUSTER_NAME=$(get_param "/microservices/$ENVIRONMENT/eks/cluster_name" false)
+          if [ -z "$EKS_CLUSTER_NAME" ]; then
+            EKS_CLUSTER_NAME="${{ env.EKS_CLUSTER_NAME }}"
+          fi
+
+          # collect missing params
+          [ -z "$DB_ENDPOINT" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/endpoint")
+          [ -z "$DB_PORT" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/port")
+          [ -z "$DB_NAME" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/name")
+          [ -z "$DB_USER" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/username")
+          [ -z "$DB_PASS" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/password")
+
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "ERROR: Missing required SSM parameters:" >&2
+            for p in "${missing[@]}"; do echo "  - $p" >&2; done
+            echo "Please create the missing SSM Parameter(s) or adjust the workflow inputs." >&2
+            exit 1
+          fi
+
           DB_HOST=${DB_ENDPOINT%:*}
-          DB_PORT=$(aws ssm get-parameter --name "/microservices/$ENVIRONMENT/customer-service-db/port" --query "Parameter.Value" --output text)
-          DB_NAME=$(aws ssm get-parameter --name "/microservices/$ENVIRONMENT/customer-service-db/name" --query "Parameter.Value" --output text)
-
-          # EKS Cluster Name
-          EKS_CLUSTER_NAME=$(aws ssm get-parameter --name "/microservices/$ENVIRONMENT/eks/cluster_name" --query "Parameter.Value" --output text 2>/dev/null || echo "${{ env.EKS_CLUSTER_NAME }}")
-
-          # Secure credentials
-          DB_USER=$(aws ssm get-parameter --name "/microservices/$ENVIRONMENT/customer-service-db/username" --with-decryption --query "Parameter.Value" --output text)
-          DB_PASS=$(aws ssm get-parameter --name "/microservices/$ENVIRONMENT/customer-service-db/password" --with-decryption --query "Parameter.Value" --output text)
 
           # Mask secrets
           echo "::add-mask::$DB_USER"
