@@ -135,12 +135,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout K8s Infra Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          repository: rajada1/${{ env.K8S_INFRA_REPO }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: k8s-infra
+          fetch-depth: 0
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -266,10 +264,10 @@ jobs:
 
       - name: Deploy to EKS
         run: |
-          cd k8s-infra/microservices/customer-service
+                  cd k8s/customer-service
 
-          # Apply all manifests
-          kubectl apply -k . -n ${{ env.SERVICE_NAME }}
+                  # Apply all manifests
+                  kubectl apply -k . -n ${{ env.SERVICE_NAME }}
 
           # Update image with correct tag
           kubectl set image deployment/customer-service-deployment \
