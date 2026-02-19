@@ -263,20 +263,13 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy to EKS
+        env:
+          IMAGE_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
         run: |
-                  cd k8s/customer-service
-
-                  # Apply all manifests
-                  kubectl apply -k . -n ${{ env.SERVICE_NAME }}
-
-          # Update image with correct tag
-          kubectl set image deployment/customer-service-deployment \
-            customer-service=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
-            -n ${{ env.SERVICE_NAME }}
-
-          # Force imagePullPolicy to Always
-          kubectl patch deployment customer-service-deployment -n ${{ env.SERVICE_NAME }} \
-            -p '{"spec":{"template":{"spec":{"containers":[{"name":"customer-service","imagePullPolicy":"Always"}]}}}}'
+          bash scripts/deploy.sh
 
       - name: Wait for deployment rollout
         run: |
