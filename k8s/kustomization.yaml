@@ -9,6 +9,7 @@ resources:
   - configmap.yaml
   - secret.yaml
   - deployment.yaml
+  - serviceaccount.yaml
   - service.yaml
   - hpa.yaml
   - ingress.yaml
