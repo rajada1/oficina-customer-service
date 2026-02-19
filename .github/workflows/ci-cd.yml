@@ -155,63 +155,91 @@ jobs:
 
       - name: Retrieve Secrets from SSM
         id: ssm
-        run: |
-          echo "Retrieving parameters from SSM..."
-          set -euo pipefail
-          ENVIRONMENT=${{ github.event.inputs.environment || 'dev' }}
+              env:
+                SECRET_DB_HOST: ${{ secrets.DB_HOST }}
+                SECRET_DB_PORT: ${{ secrets.DB_PORT }}
+                SECRET_DB_NAME: ${{ secrets.DB_NAME }}
+                SECRET_DB_USER: ${{ secrets.DB_USER }}
+                SECRET_DB_PASS: ${{ secrets.DB_PASS }}
+                SECRET_JWT_SECRET: ${{ secrets.JWT_SECRET }}
+                SECRET_NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
+                SECRET_EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+              run: |
+                  echo "Retrieving parameters from SSM (with GitHub Secrets fallback)..."
+                  set -euo pipefail
+                  ENVIRONMENT=${{ github.event.inputs.environment || 'dev' }}
 
-          missing=()
+                  get_param() {
+                    local name="$1"; local decrypt="$2"
+                    if [ "$decrypt" = "true" ]; then
+                      aws ssm get-parameter --name "$name" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo ""
+                    else
+                      aws ssm get-parameter --name "$name" --query "Parameter.Value" --output text 2>/dev/null || echo ""
+                    fi
+                  }
 
-          get_param() {
-            local name="$1"; local decrypt="$2"
-            if [ "$decrypt" = "true" ]; then
-              aws ssm get-parameter --name "$name" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo ""
-            else
-              aws ssm get-parameter --name "$name" --query "Parameter.Value" --output text 2>/dev/null || echo ""
-            fi
-          }
+                  DB_ENDPOINT=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/endpoint" false)
+                  DB_PORT=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/port" false)
+                  DB_NAME=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/name" false)
+                  DB_USER=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/username" true)
+                  DB_PASS=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/password" true)
 
-          DB_ENDPOINT=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/endpoint" false)
-          DB_PORT=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/port" false)
-          DB_NAME=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/name" false)
-          DB_USER=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/username" true)
-          DB_PASS=$(get_param "/microservices/$ENVIRONMENT/customer-service-db/password" true)
+                  # EKS cluster (optional fallback to env/secrets)
+                  EKS_CLUSTER_NAME=$(get_param "/microservices/$ENVIRONMENT/eks/cluster_name" false)
+                  if [ -z "$EKS_CLUSTER_NAME" ]; then
+                    EKS_CLUSTER_NAME="${{ env.EKS_CLUSTER_NAME }}"
+                    if [ -n "${SECRET_EKS_CLUSTER_NAME:-}" ]; then
+                      EKS_CLUSTER_NAME="${SECRET_EKS_CLUSTER_NAME}"
+                    fi
+                  fi
 
-          # EKS cluster (optional fallback to env)
-          EKS_CLUSTER_NAME=$(get_param "/microservices/$ENVIRONMENT/eks/cluster_name" false)
-          if [ -z "$EKS_CLUSTER_NAME" ]; then
-            EKS_CLUSTER_NAME="${{ env.EKS_CLUSTER_NAME }}"
-          fi
+                  # Try to fallback to GitHub Secrets for any missing values
+                  if [ -z "$DB_ENDPOINT" ] && [ -n "${SECRET_DB_HOST:-}" ]; then
+                    DB_ENDPOINT="${SECRET_DB_HOST}"
+                  fi
+                  if [ -z "$DB_PORT" ] && [ -n "${SECRET_DB_PORT:-}" ]; then
+                    DB_PORT="${SECRET_DB_PORT}"
+                  fi
+                  if [ -z "$DB_NAME" ] && [ -n "${SECRET_DB_NAME:-}" ]; then
+                    DB_NAME="${SECRET_DB_NAME}"
+                  fi
+                  if [ -z "$DB_USER" ] && [ -n "${SECRET_DB_USER:-}" ]; then
+                    DB_USER="${SECRET_DB_USER}"
+                  fi
+                  if [ -z "$DB_PASS" ] && [ -n "${SECRET_DB_PASS:-}" ]; then
+                    DB_PASS="${SECRET_DB_PASS}"
+                  fi
 
-          # collect missing params
-          [ -z "$DB_ENDPOINT" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/endpoint")
-          [ -z "$DB_PORT" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/port")
-          [ -z "$DB_NAME" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/name")
-          [ -z "$DB_USER" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/username")
-          [ -z "$DB_PASS" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/password")
+                  missing=()
+                  [ -z "$DB_ENDPOINT" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/endpoint (and secret DB_HOST)")
+                  [ -z "$DB_PORT" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/port (and secret DB_PORT)")
+                  [ -z "$DB_NAME" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/name (and secret DB_NAME)")
+                  [ -z "$DB_USER" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/username (and secret DB_USER)")
+                  [ -z "$DB_PASS" ] && missing+=("/microservices/$ENVIRONMENT/customer-service-db/password (and secret DB_PASS)")
 
-          if [ ${#missing[@]} -ne 0 ]; then
-            echo "ERROR: Missing required SSM parameters:" >&2
-            for p in "${missing[@]}"; do echo "  - $p" >&2; done
-            echo "Please create the missing SSM Parameter(s) or adjust the workflow inputs." >&2
-            exit 1
-          fi
+                  if [ ${#missing[@]} -ne 0 ]; then
+                    echo "ERROR: Missing required SSM parameters and no fallback secrets available:" >&2
+                    for p in "${missing[@]}"; do echo "  - $p" >&2; done
+                    echo "Please create the missing SSM Parameter(s) or add the corresponding GitHub Secrets." >&2
+                    exit 1
+                  fi
 
-          DB_HOST=${DB_ENDPOINT%:*}
+                  DB_HOST=${DB_ENDPOINT%:*}
 
-          # Mask secrets
-          echo "::add-mask::$DB_USER"
-          echo "::add-mask::$DB_PASS"
+                  # Mask secrets and sensitive values
+                  echo "::add-mask::$DB_USER"
+                  echo "::add-mask::$DB_PASS"
+                  [ -n "${SECRET_JWT_SECRET:-}" ] && echo "::add-mask::$SECRET_JWT_SECRET"
 
-          # Export to environment
-          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
-          echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
-          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
-          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
-          echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
-          echo "EKS_CLUSTER_NAME=$EKS_CLUSTER_NAME" >> $GITHUB_ENV
+                  # Export to environment for later steps
+                  echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+                  echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
+                  echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
+                  echo "DB_USER=$DB_USER" >> $GITHUB_ENV
+                  echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
+                  echo "EKS_CLUSTER_NAME=$EKS_CLUSTER_NAME" >> $GITHUB_ENV
 
-          echo "Secrets retrieved successfully."
+                  echo "Secrets retrieved (from SSM or Secrets) successfully."
 
       - name: Configure kubectl
         run: |
